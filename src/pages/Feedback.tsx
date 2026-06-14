@@ -11,10 +11,11 @@ import {
   Tooltip, ResponsiveContainer
 } from 'recharts'
 import { cn } from '@/lib/utils'
-import { announcements, feedbacks } from '@/data/announcements'
+import { announcements } from '@/data/announcements'
 import { venues } from '@/data/venues'
 import { useMemberStore } from '@/store/useMemberStore'
 import { useUiStore } from '@/store/useUiStore'
+import { useFeedbackStore, type RepairOrder } from '@/store/useFeedbackStore'
 import BigButton from '@/components/ui/BigButton'
 
 type TabKey = 'announcement' | 'repair' | 'review' | 'stats'
@@ -70,6 +71,10 @@ export default function Feedback() {
   const [tab, setTab] = useState<TabKey>('announcement')
   const member = useMemberStore(s => s.member)
   const showToast = useUiStore(s => s.showToast)
+  const feedbacks = useFeedbackStore(s => s.feedbacks)
+  const repairOrders = useFeedbackStore(s => s.repairOrders)
+  const addFeedback = useFeedbackStore(s => s.addFeedback)
+  const addRepairOrder = useFeedbackStore(s => s.addRepairOrder)
   const [search, setSearch] = useState(''), [expId, setExpId] = useState<string | null>(null), [ci, setCi] = useState(0)
   const [vs, setVs] = useState(''), [fs, setFs] = useState<string[]>([]), [loc, setLoc] = useState(''), [fd, setFd] = useState(''), [ph, setPh] = useState(''), [urg, setUrg] = useState(0)
   const [rt, setRt] = useState(0), [tg, setTg] = useState<string[]>([]), [tg2, setTg2] = useState(REVIEW_TARGETS[0]), [rv, setRv] = useState(''), [anon, setAnon] = useState(false), [cele, setCele] = useState(false)
@@ -78,8 +83,51 @@ export default function Feedback() {
   const filtered = useMemo(() => { const q = search.trim().toLowerCase(); const all = [...announcements].sort((a, b) => Number(b.pinned ?? 0) - Number(a.pinned ?? 0)); return q ? all.filter(a => a.title.toLowerCase().includes(q) || a.content.toLowerCase().includes(q)) : all }, [search])
   const vMap = useMemo(() => Object.fromEntries(venues.map(v => [v.id, v.name])), [])
   const vLabel = (ids: string[]) => ids.length >= venues.length ? '全馆' : ids.map(id => vMap[id] || id).join('、') || '全馆'
-  const submitRepair = () => { if (!vs) return showToast('error', '请选择场馆'); if (!loc.trim()) return showToast('error', '请填写故障位置'); showToast('success', `报修提交成功！工单号：BX${Date.now().toString().slice(-6)}，预计2h内响应`); setVs(''); setFs([]); setLoc(''); setFd(''); setPh(''); setUrg(0) }
-  const submitReview = () => { if (!rt) return showToast('error', '请选择星级评分'); setCele(true); setTimeout(() => { setCele(false); showToast('success', '感谢您的评价！') }, 2500); setRt(0); setTg([]); setRv(''); setAnon(false) }
+  const submitRepair = () => {
+    if (!vs) return showToast('error', '请选择场馆')
+    if (!loc.trim()) return showToast('error', '请填写故障位置')
+    const venue = venues.find(v => v.id === vs)
+    const order = addRepairOrder({
+      memberId: member?.id || 'guest',
+      memberName: anon ? '匿名会员' : member?.name,
+      venueId: vs,
+      venueName: `${venue?.name || ''}·${fs.join('、') || '其他'}`,
+      faultTypes: fs.length ? fs : ['其他'],
+      location: loc,
+      description: fd || '无详细描述',
+      phone: ph || member?.phone || '',
+      urgency: urg,
+    })
+    showToast('success', `报修提交成功！工单号：${order.id}，预计2h内响应`)
+    setVs(''); setFs([]); setLoc(''); setFd(''); setPh(''); setUrg(0)
+  }
+  const submitReview = () => {
+    if (!rt) return showToast('error', '请选择星级评分')
+    const type = rt >= 4 ? '表扬' : rt >= 3 ? '建议' : '投诉'
+    const content = rv || (tg.length > 0 ? `标签评价：${tg.join('、')}` : '无文字评价')
+    addFeedback({
+      memberId: member?.id || 'guest',
+      memberName: anon ? '匿名会员' : member?.name,
+      type,
+      rating: rt,
+      content,
+    })
+    setCele(true)
+    setTimeout(() => { setCele(false); showToast('success', '感谢您的评价！') }, 2500)
+    setRt(0); setTg([]); setRv(''); setAnon(false)
+  }
+  const displayRepairOrders = member
+    ? repairOrders.filter(r => r.memberId === member.id)
+    : repairOrders
+  const formatTimeAgo = (iso: string) => {
+    const diff = Date.now() - new Date(iso).getTime()
+    const mins = Math.floor(diff / 60000)
+    if (mins < 60) return `${mins}分钟前`
+    const hours = Math.floor(mins / 60)
+    if (hours < 24) return `${hours}小时前`
+    const days = Math.floor(hours / 24)
+    return `${days}天前`
+  }
 
   return (
     <div className="h-full overflow-y-auto p-8">
@@ -168,26 +216,40 @@ export default function Feedback() {
             <div className="card p-6">
               <h2 className="text-xl font-bold text-slate-800">历史报修</h2><p className="mt-1 text-sm text-slate-500">查看您的报修处理进度</p>
               <div className="mt-6 space-y-4">
-                {[{ no: 'BX245821', type: '羽毛球馆·灯光', st: '处理中', t: '2小时前', s: 2 }, { no: 'BX245789', type: '篮球馆·地面', st: '已处理', t: '昨天', s: 4 }, { no: 'BX245673', type: '游泳馆·淋浴', st: '已处理', t: '3天前', s: 4 }].map(r => (
-                  <div key={r.no} className="rounded-2xl border-2 border-slate-100 p-5">
-                    <div className="flex items-start justify-between">
-                      <div><div className="font-mono text-sm font-bold text-primary-600">#{r.no}</div><div className="mt-1 font-semibold text-slate-800">{r.type}</div></div>
-                      <span className={cn('rounded-full px-3 py-1 text-xs font-bold', r.st === '处理中' ? 'bg-warning-100 text-warning-600' : 'bg-success-100 text-success-600')}>{r.st}</span>
-                    </div>
-                    <div className="mt-4">
-                      <div className="relative flex items-center justify-between">
-                        {['提交', '受理', '派单', '完成'].map((s, i) => (
-                          <div key={s} className="relative z-10 flex flex-col items-center">
-                            <div className={cn('flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold', i < r.s ? 'bg-primary-500 text-white' : 'bg-slate-200 text-slate-500')}>{i < r.s ? <CheckCircle className="h-4 w-4" /> : i + 1}</div>
-                            <span className={cn('mt-2 text-xs font-medium', i < r.s ? 'text-primary-600' : 'text-slate-400')}>{s}</span>
-                          </div>
-                        ))}
-                        <div className="absolute left-4 right-4 top-4 h-1 -z-0 rounded-full bg-slate-200"><div className="h-full rounded-full bg-primary-500 transition-all" style={{ width: `${(r.s - 1) / 3 * 100}%` }} /></div>
-                      </div>
-                    </div>
-                    <div className="mt-3 flex items-center gap-1 text-xs text-slate-400"><Clock className="h-3 w-3" />{r.t}提交</div>
+                {displayRepairOrders.length === 0 ? (
+                  <div className="py-12 text-center text-slate-400">
+                    <Settings className="h-12 w-12 mx-auto mb-3 opacity-40" />
+                    <p>暂无报修记录</p>
                   </div>
-                ))}
+                ) : (
+                  displayRepairOrders.map((r: RepairOrder) => (
+                    <div key={r.id} className="rounded-2xl border-2 border-slate-100 p-5">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <div className="font-mono text-sm font-bold text-primary-600">#{r.id}</div>
+                          <div className="mt-1 font-semibold text-slate-800">{r.venueName}</div>
+                          {r.location && <div className="mt-0.5 text-xs text-slate-500">位置：{r.location}</div>}
+                        </div>
+                        <span className={cn('rounded-full px-3 py-1 text-xs font-bold',
+                          r.status === '处理中' ? 'bg-warning-100 text-warning-600' :
+                          r.status === '已完成' ? 'bg-success-100 text-success-600' :
+                          'bg-primary-100 text-primary-600')}>{r.status}</span>
+                      </div>
+                      <div className="mt-4">
+                        <div className="relative flex items-center justify-between">
+                          {['提交', '受理', '派单', '完成'].map((s, i) => (
+                            <div key={s} className="relative z-10 flex flex-col items-center">
+                              <div className={cn('flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold', i < r.stage ? 'bg-primary-500 text-white' : 'bg-slate-200 text-slate-500')}>{i < r.stage ? <CheckCircle className="h-4 w-4" /> : i + 1}</div>
+                              <span className={cn('mt-2 text-xs font-medium', i < r.stage ? 'text-primary-600' : 'text-slate-400')}>{s}</span>
+                            </div>
+                          ))}
+                          <div className="absolute left-4 right-4 top-4 h-1 -z-0 rounded-full bg-slate-200"><div className="h-full rounded-full bg-primary-500 transition-all" style={{ width: `${Math.max(0, (r.stage - 1)) / 3 * 100}%` }} /></div>
+                        </div>
+                      </div>
+                      <div className="mt-3 flex items-center gap-1 text-xs text-slate-400"><Clock className="h-3 w-3" />{formatTimeAgo(r.createdAt)}提交</div>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           </motion.div>
@@ -225,19 +287,32 @@ export default function Feedback() {
               </div>
               <BigButton size="lg" fullWidth className="mt-8" variant="accent" icon={<Send className="h-6 w-6" />} onClick={submitReview}>提交评价</BigButton>
               <div className="mt-10"><h3 className="text-lg font-bold text-slate-800">最近评价</h3><div className="mt-4 space-y-4">
-                {feedbacks.slice(0, 2).map(f => (
-                  <div key={f.id} className="rounded-2xl border-2 border-slate-100 p-5">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary-100 font-bold text-primary-600">{f.memberName?.[0]}</div>
-                        <div><div className="font-semibold text-slate-800">{f.memberName}</div><div className="flex items-center gap-1 text-xs text-slate-400">{Array.from({ length: 5 }).map((_, i) => <Star key={i} className={cn('h-3 w-3', i < f.rating ? 'fill-warning-400 text-warning-400' : 'text-slate-200')} />)}<span className="ml-2">{new Date(f.createdAt).toLocaleDateString('zh-CN')}</span></div></div>
-                      </div>
-                      <span className={cn('rounded-full px-3 py-1 text-xs font-bold', f.type === '表扬' ? 'bg-success-100 text-success-600' : f.type === '建议' ? 'bg-primary-100 text-primary-600' : 'bg-danger-100 text-danger-600')}>{f.type}</span>
-                    </div>
-                    <p className="mt-3 text-sm leading-relaxed text-slate-600">{f.content}</p>
-                    {f.reply && <div className="mt-3 rounded-xl bg-primary-50 p-4"><div className="text-xs font-bold text-primary-600">官方回复</div><p className="mt-1 text-sm text-slate-600">{f.reply}</p></div>}
+                {feedbacks.length === 0 ? (
+                  <div className="py-12 text-center text-slate-400">
+                    <ThumbsUp className="h-12 w-12 mx-auto mb-3 opacity-40" />
+                    <p>暂无评价记录</p>
                   </div>
-                ))}
+                ) : (
+                  feedbacks.slice(0, 5).map(f => (
+                    <div key={f.id} className="rounded-2xl border-2 border-slate-100 p-5">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary-100 font-bold text-primary-600">{f.memberName?.[0] || '会'}</div>
+                          <div>
+                            <div className="font-semibold text-slate-800">{f.memberName || '匿名会员'}</div>
+                            <div className="flex items-center gap-1 text-xs text-slate-400">
+                              {Array.from({ length: 5 }).map((_, i) => <Star key={i} className={cn('h-3 w-3', i < Math.floor(f.rating) ? 'fill-warning-400 text-warning-400' : 'text-slate-200')} />)}
+                              <span className="ml-2">{new Date(f.createdAt).toLocaleDateString('zh-CN')} {new Date(f.createdAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}</span>
+                            </div>
+                          </div>
+                        </div>
+                        <span className={cn('rounded-full px-3 py-1 text-xs font-bold', f.type === '表扬' ? 'bg-success-100 text-success-600' : f.type === '建议' ? 'bg-primary-100 text-primary-600' : 'bg-danger-100 text-danger-600')}>{f.type}</span>
+                      </div>
+                      <p className="mt-3 text-sm leading-relaxed text-slate-600">{f.content}</p>
+                      {f.reply && <div className="mt-3 rounded-xl bg-primary-50 p-4"><div className="text-xs font-bold text-primary-600">官方回复</div><p className="mt-1 text-sm text-slate-600">{f.reply}</p></div>}
+                    </div>
+                  ))
+                )}
               </div></div>
             </div>
           </motion.div>

@@ -51,6 +51,7 @@ export default function Reschedule() {
   const showToast = useUiStore((s) => s.showToast)
   const bookings = useBookingStore((s) => s.bookings)
   const cancelBooking = useBookingStore((s) => s.cancelBooking)
+  const rescheduleBooking = useBookingStore((s) => s.rescheduleBooking)
   const member = useMemberStore((s) => s.member)
 
   const filteredBookings = useMemo(() => {
@@ -90,6 +91,15 @@ export default function Reschedule() {
 
   const handleConfirmReschedule = () => {
     if (!rescheduleModal.booking || !selectedNewDate || !selectedNewSlot) { showToast('warning', '请选择新的日期和时段'); return }
+    const endHour = parseInt(selectedNewSlot.split(':')[0]) + 1
+    const endTime = `${String(endHour).padStart(2, '0')}:00`
+    const timeRange = `${selectedNewSlot} - ${endTime}`
+    rescheduleBooking(rescheduleModal.booking.id, {
+      date: selectedNewDate,
+      timeRange,
+      startTime: selectedNewSlot,
+      endTime,
+    })
     showToast('success', '改签成功！已发送确认通知')
     setRescheduleModal({ open: false, booking: null }); setSelectedNewDate(''); setSelectedNewSlot('')
   }

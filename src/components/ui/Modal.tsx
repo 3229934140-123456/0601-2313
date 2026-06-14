@@ -36,39 +36,50 @@ export default function Modal() {
                   <p>暂无优惠券</p>
                 </div>
               ) : (
-                coupons.filter(c => c.memberId === member?.id || !c.memberId).map((c) => (
-                  <div
-                    key={c.id}
-                    className={cn(
-                      'flex rounded-2xl overflow-hidden border transition-all',
-                      c.used ? 'bg-slate-50 border-slate-200 opacity-60' :
-                      c.type === 'discount' ? 'border-accent-200 bg-gradient-to-r from-accent-50 to-white' :
-                      c.type === 'cash' ? 'border-primary-200 bg-gradient-to-r from-primary-50 to-white'
-                                         : 'border-success-200 bg-gradient-to-r from-success-50 to-white'
-                    )}
-                  >
-                    <div className={cn(
-                      'w-28 flex flex-col items-center justify-center py-4 px-3 text-white font-bold',
-                      c.used ? 'bg-slate-400' :
-                      c.type === 'discount' ? 'bg-gradient-to-br from-accent-400 to-accent-600' :
-                      c.type === 'cash' ? 'bg-gradient-to-br from-primary-400 to-primary-600'
-                                         : 'bg-gradient-to-br from-success-400 to-success-600'
-                    )}>
-                      {c.type === 'discount' && <div className="text-3xl">{c.discountPercent?.toString().replace('0.', '')}折</div>}
-                      {c.type === 'cash' && <div className="text-3xl">¥{c.discountAmount}</div>}
-                      {c.type === 'voucher' && <div className="text-xl">体验券</div>}
-                      {c.used && <div className="text-xs mt-1">已使用</div>}
+                coupons.filter(c => c.memberId === member?.id || !c.memberId).map((c) => {
+                  const colorMap: Record<string, string> = {
+                    '满减': 'from-accent-400 to-accent-600',
+                    '折扣': 'from-primary-400 to-primary-600',
+                    '立减': 'from-success-400 to-success-600',
+                    '体验券': 'from-warning-400 to-warning-600',
+                  }
+                  const bgMap: Record<string, string> = {
+                    '满减': 'border-accent-200 bg-gradient-to-r from-accent-50 to-white',
+                    '折扣': 'border-primary-200 bg-gradient-to-r from-primary-50 to-white',
+                    '立减': 'border-success-200 bg-gradient-to-r from-success-50 to-white',
+                    '体验券': 'border-warning-200 bg-gradient-to-r from-warning-50 to-white',
+                  }
+                  const amountText = c.type === '折扣' && c.discountPercent
+                    ? `${(c.discountPercent * 10).toFixed(1)}折`
+                    : c.type === '体验券'
+                    ? '体验券'
+                    : `¥${c.discount}`
+                  const thresholdText = c.minAmount ? `满${formatCurrency(c.minAmount)}可用` : '无门槛'
+                  return (
+                    <div
+                      key={c.id}
+                      className={cn(
+                        'flex rounded-2xl overflow-hidden border transition-all',
+                        c.used ? 'bg-slate-50 border-slate-200 opacity-60' : bgMap[c.type] || 'border-slate-200 bg-white'
+                      )}
+                    >
+                      <div className={cn(
+                        'w-28 flex flex-col items-center justify-center py-4 px-3 text-white font-bold',
+                        c.used ? 'bg-slate-400' : `bg-gradient-to-br ${colorMap[c.type] || 'from-slate-400 to-slate-500'}`
+                      )}>
+                        <div className={c.type === '体验券' ? 'text-xl' : 'text-3xl'}>{amountText}</div>
+                        {c.used && <div className="text-xs mt-1">已使用</div>}
+                      </div>
+                      <div className="flex-1 p-4">
+                        <p className="font-bold text-slate-800">{c.name}</p>
+                        <p className="text-xs text-slate-500 mt-1">
+                          {thresholdText}
+                          {' · '}有效期至 {new Date(c.expireAt).toLocaleDateString('zh-CN')}
+                        </p>
+                      </div>
                     </div>
-                    <div className="flex-1 p-4">
-                      <p className="font-bold text-slate-800">{c.name}</p>
-                      <p className="text-xs text-slate-500 mt-1">
-                        {c.minSpend ? `满${formatCurrency(c.minSpend)}可用` : '无门槛'}
-                        {' · '}有效期至 {new Date(c.expireAt).toLocaleDateString('zh-CN')}
-                      </p>
-                      <p className="text-xs text-slate-400 mt-2">{c.description}</p>
-                    </div>
-                  </div>
-                ))
+                  )
+                })
               )}
             </div>
           </div>

@@ -70,30 +70,7 @@ export default function Login() {
   }
 
   const showCouponsModal = () => {
-    const valid = coupons.filter((c: Coupon) => !c.used)
-    const content = (
-      <div className="space-y-3">
-        {valid.length === 0 ? (
-          <p className="py-8 text-center text-gray-400">暂无可用优惠券</p>
-        ) : (
-          valid.map((c: Coupon) => (
-            <div key={c.id} className="flex items-center gap-4 rounded-xl border border-gray-100 bg-gradient-to-r from-orange-50 to-amber-50 p-4">
-              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-accent-400 to-accent-600 text-white">
-                <Ticket className="h-7 w-7" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-bold text-gray-800">{c.name}</p>
-                <p className="text-sm text-gray-500">有效期至 {c.expireAt}</p>
-              </div>
-              <p className="text-lg font-bold text-accent-500 text-right">
-                {c.type === '折扣' && c.discountPercent ? `${(c.discountPercent * 10).toFixed(1)}折` : c.type === '体验券' ? '免费' : `¥${c.discount}`}
-              </p>
-            </div>
-          ))
-        )}
-      </div>
-    )
-    openModal('coupons', { title: '我的优惠券', content })
+    openModal('coupons', { title: '我的优惠券' })
   }
 
   const showRecordsModal = () => {

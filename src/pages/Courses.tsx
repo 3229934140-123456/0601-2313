@@ -6,7 +6,8 @@ import {
 } from 'lucide-react'
 import { useUiStore } from '@/store/useUiStore'
 import { useMemberStore } from '@/store/useMemberStore'
-import { courses, coaches, getCoachById } from '@/data/courses'
+import { useCourseStore } from '@/store/useCourseStore'
+import { coaches, getCoachById } from '@/data/courses'
 import { formatCurrency } from '@/utils/format'
 import { cn } from '@/lib/utils'
 import type { Course } from '@/types'
@@ -29,6 +30,9 @@ export default function Courses() {
   const showToast = useUiStore((s) => s.showToast)
   const member = useMemberStore((s) => s.member)
   const deductBalance = useMemberStore((s) => s.deductBalance)
+  const courses = useCourseStore((s) => s.courses)
+  const enrollCourse = useCourseStore((s) => s.enrollCourse)
+  const isEnrolled = useCourseStore((s) => s.isEnrolled)
 
   const weekDates = useMemo(() => {
     const now = new Date()
@@ -71,10 +75,23 @@ export default function Courses() {
     if (!readTerms) { showToast('warning', '请先勾选注意事项'); return }
     if (!member) { showToast('warning', '请先登录会员'); return }
     if (member.balance < enrollModal.course.price) { showToast('error', '余额不足'); return }
-    setEnrolling(true); await new Promise((r) => setTimeout(r, 1200))
-    deductBalance(enrollModal.course.price); setEnrolling(false); setReadTerms(false)
-    showToast('success', `报名成功！已支付${formatCurrency(enrollModal.course.price)}`)
-    setEnrollModal({ open: false, course: null })
+    if (isEnrolled(enrollModal.course.id, member.id)) { showToast('warning', '您已报名该课程'); return }
+    if (enrollModal.course.enrolled >= enrollModal.course.capacity) { showToast('warning', '课程已满员'); return }
+
+    setEnrolling(true)
+    await new Promise((r) => setTimeout(r, 1200))
+
+    deductBalance(enrollModal.course.price)
+    const result = enrollCourse(enrollModal.course.id, member.id)
+    setEnrolling(false)
+    setReadTerms(false)
+
+    if (result.success) {
+      showToast('success', `报名成功！已支付${formatCurrency(enrollModal.course.price)}`)
+      setEnrollModal({ open: false, course: null })
+    } else {
+      showToast('error', result.message)
+    }
   }
 
   const renderStars = (rating: number, key: string) => (
@@ -137,7 +154,9 @@ export default function Courses() {
             <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
               {filteredCourses.map((c, idx) => {
                 const coach = getCoachById(c.coachId), tag = getTag(c), ratio = Math.min(100, (c.enrolled / c.capacity) * 100)
-                const v = venueTypeMap[c.venueType] || venueTypeMap.basketball, full = c.enrolled >= c.capacity
+                const v = venueTypeMap[c.venueType] || venueTypeMap.basketball
+                const full = c.enrolled >= c.capacity
+                const alreadyEnrolled = member ? isEnrolled(c.id, member.id) : false
                 return (
                   <motion.div key={c.id} layout initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.04 }}
                     className="group overflow-hidden rounded-3xl bg-white shadow-card transition-all hover:shadow-card-hover hover:-translate-y-1">
@@ -165,10 +184,12 @@ export default function Courses() {
                       </div>
                       <div className="flex items-center justify-between">
                         <div><span className="text-2xl font-bold text-accent-600">{formatCurrency(c.price)}</span><span className="ml-1 text-xs text-gray-400">/人</span></div>
-                        <button onClick={() => setEnrollModal({ open: true, course: c })} disabled={full}
+                        <button onClick={() => !alreadyEnrolled && !full && setEnrollModal({ open: true, course: c })} disabled={full || alreadyEnrolled}
                           className={cn('h-12 rounded-xl px-5 font-bold text-sm transition active:scale-95',
-                            full ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-gradient-to-r from-primary-500 to-primary-600 text-white shadow-lg shadow-primary-500/25 hover:shadow-xl')}>
-                          {full ? '已满员' : '立即报名'}
+                            alreadyEnrolled ? 'bg-success-100 text-success-600 cursor-not-allowed' :
+                            full ? 'bg-gray-100 text-gray-400 cursor-not-allowed' :
+                            'bg-gradient-to-r from-primary-500 to-primary-600 text-white shadow-lg shadow-primary-500/25 hover:shadow-xl')}>
+                          {alreadyEnrolled ? '已报名' : full ? '已满员' : '立即报名'}
                         </button>
                       </div>
                     </div>

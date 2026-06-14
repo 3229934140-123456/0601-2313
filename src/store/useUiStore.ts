@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import type { ReactNode } from 'react'
 
 interface Toast {
   id: string
@@ -6,9 +7,16 @@ interface Toast {
   message: string
 }
 
+interface ModalData {
+  title?: string
+  content?: ReactNode
+  amount?: number
+  desc?: string
+}
+
 interface ModalState {
   type: string
-  data?: unknown
+  data?: ModalData
 }
 
 interface UiState {
@@ -17,7 +25,7 @@ interface UiState {
   toast: Toast[]
   showToast: (type: Toast['type'], message: string) => void
   modal: ModalState | null
-  openModal: (type: string, data?: unknown) => void
+  openModal: (type: string, data?: ModalData) => void
   closeModal: () => void
 }
 

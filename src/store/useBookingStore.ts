@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import type { Booking } from '../types'
-import { courts, venues } from '../data/venues'
+import { courts, venues, timeSlots } from '../data/venues'
 import { bookings as initialBookings } from '../data/bookings'
 import { generateEntryCode } from '../utils/format'
 import { useMemberStore } from './useMemberStore'
@@ -24,7 +24,7 @@ interface BookingState {
   calculateTotal: () => { total: number; discount: number; pay: number }
   confirmPayment: () => Promise<void>
   cancelBooking: (id: string) => void
-  rescheduleBooking: (id: string, newSlotId: string) => void
+  rescheduleBooking: (id: string, data: { date?: string; timeRange?: string; startTime?: string; endTime?: string }) => void
   checkInBooking: (id: string) => void
 }
 
@@ -59,8 +59,10 @@ export const useBookingStore = create<BookingState>((set, get) => ({
       const coupon = coupons.find((c) => c.id === selectedCouponId)
       if (coupon && !coupon.used) {
         if (coupon.type === '满减' && total >= (coupon.minAmount || 0)) discount = coupon.discount
-        else if (coupon.type === '折扣') discount = Number((total * (1 - coupon.discount)).toFixed(2))
-        else if (coupon.type === '立减') discount = coupon.discount
+        else if (coupon.type === '折扣' && coupon.discountPercent) {
+          discount = Number((total * (1 - coupon.discountPercent)).toFixed(2))
+        } else if (coupon.type === '立减') discount = coupon.discount
+        else if (coupon.type === '体验券') discount = coupon.discount
       }
     }
     discount = Math.min(discount, total)
@@ -73,15 +75,15 @@ export const useBookingStore = create<BookingState>((set, get) => ({
     const mState = useMemberStore.getState()
     mState.deductBalance(pay)
     if (state.selectedCouponId) {
-      useMemberStore.setState({
-        coupons: mState.coupons.map((c) =>
-          c.id === state.selectedCouponId ? { ...c, used: true } : c
-        ),
-      })
+      useMemberStore.getState().markCouponUsed(state.selectedCouponId)
     }
     const code = generateEntryCode()
     const court = courts.find((c) => c.id === state.selectedCourtId)
     const venue = venues.find((v) => v.id === state.selectedVenueId)
+    const slot = timeSlots.find((s) => s.id === state.selectedSlotId)
+    const startTime = slot?.startTime || ''
+    const endTime = slot?.endTime || ''
+    const timeRange = startTime && endTime ? `${startTime} - ${endTime}` : ''
     const booking: Booking = {
       id: `bk${Date.now()}`,
       memberId: mState.member?.id || '',
@@ -98,6 +100,9 @@ export const useBookingStore = create<BookingState>((set, get) => ({
       date: state.selectedDate,
       venueName: venue?.name,
       courtName: court?.name,
+      startTime,
+      endTime,
+      timeRange,
     }
     set({
       currentBooking: booking,
@@ -116,10 +121,10 @@ export const useBookingStore = create<BookingState>((set, get) => ({
     }))
   },
 
-  rescheduleBooking: (id, newSlotId) => {
+  rescheduleBooking: (id, data) => {
     set((state) => ({
       bookings: state.bookings.map((b) =>
-        b.id === id ? { ...b, slotIds: [newSlotId] } : b
+        b.id === id ? { ...b, ...data } : b
       ),
     }))
   },
