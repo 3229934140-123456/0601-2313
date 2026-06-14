@@ -100,6 +100,8 @@ export default function Reschedule() {
       startTime: selectedNewSlot,
       endTime,
     })
+    setQuickDate('custom')
+    setCustomDate(selectedNewDate)
     showToast('success', '改签成功！已发送确认通知')
     setRescheduleModal({ open: false, booking: null }); setSelectedNewDate(''); setSelectedNewSlot('')
   }

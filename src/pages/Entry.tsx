@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { QRCodeSVG } from 'qrcode.react'
 import {
   Printer, AlarmClock, Search, Check, Copy, Send, Ban,
-  Dumbbell, MapPin, Clock, Users,
+  Dumbbell, MapPin, Clock, Users, Calendar,
 } from 'lucide-react'
 import { useBookingStore } from '@/store/useBookingStore'
 import { useUiStore } from '@/store/useUiStore'
@@ -117,8 +117,16 @@ export default function Entry() {
                         <span className="truncate">{b.venueName}</span>
                       </div>
                       <div className="mt-1 text-sm text-slate-600 truncate">{b.courtName}</div>
-                      <div className="mt-1 flex items-center gap-1 text-xs text-slate-500">
-                        <Clock className="h-3.5 w-3.5" /><span>{b.timeRange}</span>
+                      <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500">
+                        <span className="flex items-center gap-1">
+                          <Calendar className="h-3.5 w-3.5" />{b.date}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <Clock className="h-3.5 w-3.5" />{b.timeRange || '待定'}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <Users className="h-3.5 w-3.5" />{b.peopleCount}人
+                        </span>
                       </div>
                     </div>
                     <span className={cn('shrink-0 rounded-full px-2.5 py-1 text-xs font-medium', st.cls)}>{st.label}</span>

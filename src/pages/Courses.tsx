@@ -48,13 +48,13 @@ export default function Courses() {
     const map: Record<string, number> = {}
     courses.forEach((c) => { const d = new Date(c.startTime).toISOString().split('T')[0]; map[d] = (map[d] || 0) + 1 })
     return map
-  }, [])
+  }, [courses])
 
   const filteredCourses = useMemo(() => {
     let list = courses.filter((c) => new Date(c.startTime).toISOString().split('T')[0] === activeDay)
     if (selectedCoachId) list = list.filter((c) => c.coachId === selectedCoachId)
     return list
-  }, [activeDay, selectedCoachId])
+  }, [activeDay, selectedCoachId, courses])
 
   const fmt = (n: number) => n.toString().padStart(2, '0')
   const formatCourseTime = (iso: string, duration: number) => {

@@ -1,9 +1,22 @@
 import { create } from 'zustand'
 import type { Booking } from '../types'
-import { courts, venues, timeSlots } from '../data/venues'
+import { courts, venues } from '../data/venues'
 import { bookings as initialBookings } from '../data/bookings'
 import { generateEntryCode } from '../utils/format'
 import { useMemberStore } from './useMemberStore'
+
+const STORAGE_KEY = 'booking-store-v1'
+
+const loadBookings = (): Booking[] => {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (raw) {
+      const data = JSON.parse(raw)
+      if (Array.isArray(data) && data.length > 0) return data
+    }
+  } catch {}
+  return [...initialBookings]
+}
 
 interface BookingState {
   selectedVenueId: string
@@ -31,6 +44,24 @@ interface BookingState {
 const today = new Date()
 const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
 
+const parseSlotTime = (slotId: string | null): { startTime: string; endTime: string; timeRange: string } => {
+  if (!slotId) return { startTime: '', endTime: '', timeRange: '' }
+  let startHour = 9
+  if (slotId.startsWith('slot-')) {
+    startHour = parseInt(slotId.replace('slot-', ''), 10)
+  } else {
+    const parts = slotId.split('-')
+    const lastPart = parts[parts.length - 1]
+    startHour = parseInt(lastPart, 10)
+    if (isNaN(startHour)) startHour = 9
+  }
+  const endHour = startHour + 1
+  const startTime = `${String(startHour).padStart(2, '0')}:00`
+  const endTime = `${String(endHour).padStart(2, '0')}:00`
+  const timeRange = `${startTime} - ${endTime}`
+  return { startTime, endTime, timeRange }
+}
+
 export const useBookingStore = create<BookingState>((set, get) => ({
   selectedVenueId: 'v1',
   selectedDate: todayStr,
@@ -40,7 +71,7 @@ export const useBookingStore = create<BookingState>((set, get) => ({
   selectedCouponId: null,
   currentBooking: null,
   entryCode: null,
-  bookings: [...initialBookings],
+  bookings: loadBookings(),
 
   setSelectedVenueId: (id) => set({ selectedVenueId: id, selectedCourtId: null, selectedSlotId: null }),
   setSelectedDate: (date) => set({ selectedDate: date, selectedSlotId: null }),
@@ -80,10 +111,7 @@ export const useBookingStore = create<BookingState>((set, get) => ({
     const code = generateEntryCode()
     const court = courts.find((c) => c.id === state.selectedCourtId)
     const venue = venues.find((v) => v.id === state.selectedVenueId)
-    const slot = timeSlots.find((s) => s.id === state.selectedSlotId)
-    const startTime = slot?.startTime || ''
-    const endTime = slot?.endTime || ''
-    const timeRange = startTime && endTime ? `${startTime} - ${endTime}` : ''
+    const { startTime, endTime, timeRange } = parseSlotTime(state.selectedSlotId)
     const booking: Booking = {
       id: `bk${Date.now()}`,
       memberId: mState.member?.id || '',
@@ -137,3 +165,9 @@ export const useBookingStore = create<BookingState>((set, get) => ({
     }))
   },
 }))
+
+useBookingStore.subscribe((state) => {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state.bookings))
+  } catch {}
+})
