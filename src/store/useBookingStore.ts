@@ -1,0 +1,134 @@
+import { create } from 'zustand'
+import type { Booking } from '../types'
+import { courts, venues } from '../data/venues'
+import { bookings as initialBookings } from '../data/bookings'
+import { generateEntryCode } from '../utils/format'
+import { useMemberStore } from './useMemberStore'
+
+interface BookingState {
+  selectedVenueId: string
+  selectedDate: string
+  selectedSlotId: string | null
+  selectedCourtId: string | null
+  peopleCount: number
+  selectedCouponId: string | null
+  currentBooking: Booking | null
+  entryCode: string | null
+  bookings: Booking[]
+  setSelectedVenueId: (id: string) => void
+  setSelectedDate: (date: string) => void
+  setSelectedSlotId: (id: string | null) => void
+  setSelectedCourtId: (id: string | null) => void
+  setPeopleCount: (count: number) => void
+  setSelectedCouponId: (id: string | null) => void
+  calculateTotal: () => { total: number; discount: number; pay: number }
+  confirmPayment: () => Promise<void>
+  cancelBooking: (id: string) => void
+  rescheduleBooking: (id: string, newSlotId: string) => void
+  checkInBooking: (id: string) => void
+}
+
+const today = new Date()
+const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+
+export const useBookingStore = create<BookingState>((set, get) => ({
+  selectedVenueId: 'v1',
+  selectedDate: todayStr,
+  selectedSlotId: null,
+  selectedCourtId: null,
+  peopleCount: 2,
+  selectedCouponId: null,
+  currentBooking: null,
+  entryCode: null,
+  bookings: [...initialBookings],
+
+  setSelectedVenueId: (id) => set({ selectedVenueId: id, selectedCourtId: null, selectedSlotId: null }),
+  setSelectedDate: (date) => set({ selectedDate: date, selectedSlotId: null }),
+  setSelectedSlotId: (id) => set({ selectedSlotId: id }),
+  setSelectedCourtId: (id) => set({ selectedCourtId: id }),
+  setPeopleCount: (count) => set({ peopleCount: Math.max(1, count) }),
+  setSelectedCouponId: (id) => set({ selectedCouponId: id }),
+
+  calculateTotal: () => {
+    const { selectedCourtId, selectedCouponId } = get()
+    const coupons = useMemberStore.getState().coupons
+    const court = courts.find((c) => c.id === selectedCourtId)
+    const total = court ? court.pricePerHour : 0
+    let discount = 0
+    if (selectedCouponId && coupons.length > 0) {
+      const coupon = coupons.find((c) => c.id === selectedCouponId)
+      if (coupon && !coupon.used) {
+        if (coupon.type === '满减' && total >= (coupon.minAmount || 0)) discount = coupon.discount
+        else if (coupon.type === '折扣') discount = Number((total * (1 - coupon.discount)).toFixed(2))
+        else if (coupon.type === '立减') discount = coupon.discount
+      }
+    }
+    discount = Math.min(discount, total)
+    return { total, discount, pay: Number((total - discount).toFixed(2)) }
+  },
+
+  confirmPayment: async () => {
+    const state = get()
+    const { total, discount, pay } = state.calculateTotal()
+    const mState = useMemberStore.getState()
+    mState.deductBalance(pay)
+    if (state.selectedCouponId) {
+      useMemberStore.setState({
+        coupons: mState.coupons.map((c) =>
+          c.id === state.selectedCouponId ? { ...c, used: true } : c
+        ),
+      })
+    }
+    const code = generateEntryCode()
+    const court = courts.find((c) => c.id === state.selectedCourtId)
+    const venue = venues.find((v) => v.id === state.selectedVenueId)
+    const booking: Booking = {
+      id: `bk${Date.now()}`,
+      memberId: mState.member?.id || '',
+      courtId: state.selectedCourtId || '',
+      slotIds: state.selectedSlotId ? [state.selectedSlotId] : [],
+      status: 'confirmed',
+      peopleCount: state.peopleCount,
+      totalAmount: total,
+      discount,
+      payAmount: pay,
+      payStatus: 'paid',
+      entryCode: code,
+      createdAt: new Date().toISOString(),
+      date: state.selectedDate,
+      venueName: venue?.name,
+      courtName: court?.name,
+    }
+    set({
+      currentBooking: booking,
+      entryCode: code,
+      bookings: [booking, ...state.bookings],
+      selectedSlotId: null,
+      selectedCouponId: null,
+    })
+  },
+
+  cancelBooking: (id) => {
+    set((state) => ({
+      bookings: state.bookings.map((b) =>
+        b.id === id ? { ...b, status: 'cancelled', payStatus: 'refunded' } : b
+      ),
+    }))
+  },
+
+  rescheduleBooking: (id, newSlotId) => {
+    set((state) => ({
+      bookings: state.bookings.map((b) =>
+        b.id === id ? { ...b, slotIds: [newSlotId] } : b
+      ),
+    }))
+  },
+
+  checkInBooking: (id) => {
+    set((state) => ({
+      bookings: state.bookings.map((b) =>
+        b.id === id ? { ...b, status: 'checked_in' } : b
+      ),
+    }))
+  },
+}))
